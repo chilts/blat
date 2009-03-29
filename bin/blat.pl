@@ -5,6 +5,7 @@ use strict;
 use warnings;
 use File::Find ();
 use Getopt::Mixed "nextOption";
+use File::Glob qw(:glob);
 
 my @IN_OPTS = qw(
                   src=s    s>src
@@ -61,17 +62,48 @@ MAIN: {
 
     print "dirs=@dirs\n";
 
+    foreach my $dir ( @dirs ) {
+        process_dir( $dir, $args->{dest}, $args->{lib} );
+    }
+
     exit;
 }
 
 ## ----------------------------------------------------------------------------
 # methods
 
+sub process_dir {
+    my ($src, $dest, $lib) = @_;
+
+    v( qq{Dir '$src' ... });
+
+    # firstly, see if there is a .blat.yaml file
+    my $opts = {};
+    if ( -e "$src/.blat.yaml" ) {
+        v( q{Found '.blat.yaml' file} );
+        # read in the options for this dir
+    }
+
+    # get all the files
+    my @files = bsd_glob( "$src/*" );
+    print "files=@files\n";
+
+    foreach my $file ( @files ) {
+        next if $file =~ m{ ~\z }xms;
+        v("- $file");
+    }
+}
+
 sub do_file {
     my ($dir, $file) = @_;
-
-    
 }
 
 ## ----------------------------------------------------------------------------
 
+{
+    my $verbose = 0;
+    sub v {
+        my ($msg) = @_;
+        print qq{$msg\n};
+    }
+}
