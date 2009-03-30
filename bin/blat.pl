@@ -3,9 +3,12 @@
 
 use strict;
 use warnings;
-use File::Find ();
 use Getopt::Mixed "nextOption";
-use File::Glob qw(:glob);
+use File::Find ();
+use File::Basename;
+use File::Glob ':glob';
+use File::Slurp;
+use Text::ScriptHelper qw( :all );
 
 my @IN_OPTS = qw(
                   src=s    s>src
@@ -47,6 +50,10 @@ MAIN: {
     }
 
     # check these three directories exist
+    $args->{src} =~ s{ \/* \z }{}gxms;
+    $args->{dest} =~ s{ \/* \z }{}gxms;
+    $args->{lib} =~ s{ \/* \z }{}gxms;
+
     unless ( defined $args->{src} && -d $args->{src} ) {
         Getopt::Mixed::abortMsg('specify a source directory')
     }
@@ -57,10 +64,12 @@ MAIN: {
         Getopt::Mixed::abortMsg('specify a lib (template) directory')
     }
 
-    my @dirs;
-    File::Find::find( { wanted => sub { push @dirs, $File::Find::name if -d } }, $args->{src} );
+    my @dirs = all_dirs_from_here( $args->{src} );
+    foreach my $dir ( @dirs ) {
+        process_dir( $args, $dir );
+    }
 
-    print "dirs=@dirs\n";
+    line();
 
     foreach my $dir ( @dirs ) {
         process_dir( $dir, $args->{dest}, $args->{lib} );
@@ -73,37 +82,101 @@ MAIN: {
 # methods
 
 sub process_dir {
-    my ($src, $dest, $lib) = @_;
+    my ($args, $dir) = @_;
 
-    v( qq{Dir '$src' ... });
+    my $full_dir = qq{$args->{src}/$dir};
+    title( $full_dir );
 
-    # firstly, see if there is a .blat.yaml file
-    my $opts = {};
-    if ( -e "$src/.blat.yaml" ) {
-        v( q{Found '.blat.yaml' file} );
-        # read in the options for this dir
+    my $cfg = {};
+    if ( -e qq{$full_dir/.blat.yaml} ) {
+        msg( q{Found a .blat.yaml file here} );
     }
 
-    # get all the files
-    my @files = bsd_glob( "$src/*" );
-    print "files=@files\n";
+    my @filenames = files_in_dir( $full_dir );
 
-    foreach my $file ( @files ) {
-        next if $file =~ m{ ~\z }xms;
-        v("- $file");
+    unless ( @filenames ) {
+        msg( q{No files found!} );
+        return;
     }
+
+    foreach my $filename ( @filenames ) {
+        process_file( $args, $dir, $filename );
+    }
+
+    # msg( qq{... done} );
 }
 
-sub do_file {
-    my ($dir, $file) = @_;
+sub process_file {
+    my ($args, $dir, $filename) = @_;
+
+    # nothing to do with directories
+    return if -d $filename;
+
+    my ($name, $path, $basename, $ext) = my_fileparse( $filename );
+    field('Found', $name);
+    field('Basename', $basename);
+    field('Ext', $ext);
+
+    # let's process it in the correct way
+    if ( $ext eq 'html' ) {
+        #msg( q{Doing a Phliky file} );
+        my $page = read_file( qq{$args->{src}/$dir/$filename} );
+        # print $page;
+    }
+    elsif ( $ext eq 'flk' ) {
+        #msg( q{Doing a Phliky file} );
+    }
+    elsif ( $ext eq 'xml' ) {
+        #msg( q{Doing an XML file} );
+    }
+    elsif ( $ext eq 'yaml' ) {
+        #msg( q{Doing a YAML file} );
+    }
+    field( 'Written', qq{$args->{dest}/$dir/$basename.html} );
+    msg();
+}
+
+sub template_file {
+    
 }
 
 ## ----------------------------------------------------------------------------
+# helpers for finding dirs, files and manipulating filenames
 
-{
-    my $verbose = 0;
-    sub v {
-        my ($msg) = @_;
-        print qq{$msg\n};
-    }
+sub all_dirs_from_here {
+    my ($dir) = @_;
+
+    my @dirs;
+    File::Find::find( { wanted => sub { push @dirs, $File::Find::name if -d } }, $dir );
+    @dirs = map { s{ \A $dir/ }{}gxms && $_ } @dirs;
+
+    return @dirs;
 }
+
+sub files_in_dir {
+    my ($dir) = @_;
+
+    # find all the files in this dir
+    my @filenames = bsd_glob( qq{$dir/*} );
+    @filenames = grep { -f } @filenames;
+    @filenames = map { s{ \A $dir/ }{}gxms && $_ } @filenames;
+    return @filenames;
+}
+
+sub my_fileparse {
+    my ($filename) = @_;
+
+    my ($name, $path, $basename, $ext);
+
+    # get the main filename and it's path first
+    ($name, $path) = fileparse( $filename );
+
+    # now try for it's real basename and it's extension
+    unless ( ($basename, $ext) = $name =~ m{ \A (.*) \. (\w+) \z }xms ) {
+        $basename = $name;
+        $ext = '';
+    }
+    return ($name, $path, $basename, $ext);
+}
+
+## ----------------------------------------------------------------------------
