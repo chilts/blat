@@ -71,10 +71,6 @@ MAIN: {
 
     line();
 
-    foreach my $dir ( @dirs ) {
-        process_dir( $dir, $args->{dest}, $args->{lib} );
-    }
-
     exit;
 }
 
