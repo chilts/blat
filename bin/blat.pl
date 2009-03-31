@@ -3,12 +3,15 @@
 
 use strict;
 use warnings;
+use Data::Dumper;
 use Getopt::Mixed "nextOption";
 use File::Find ();
 use File::Basename;
 use File::Glob ':glob';
 use File::Slurp;
 use Text::ScriptHelper qw( :all );
+use Text::Phliky;
+use Template;
 
 my @IN_OPTS = qw(
                   src=s    s>src
@@ -96,31 +99,52 @@ sub process_dir {
     }
 
     foreach my $filename ( @filenames ) {
-        process_file( $args, $dir, $filename );
+        my ($data, $content) = process_content( $args, $dir, $filename );
+        next unless defined $content;
+        $data->{content} = $content;
+
+        my ($name, $path, $basename, $ext) = my_fileparse( $filename );
+
+        # $template->process( \$output, $data, qq{$args->{dest}/$dir/$basename.html});
+        # print Dumper($data);
+        my $template = Template->new();
+        $template->process( qq{$args->{lib}/wrapper.thtml}, $data, qq{$args->{dest}/$dir/$basename.html} );
+        field( 'Written', qq{$args->{dest}/$dir/$basename.html} );
+
+        msg();
     }
 
     # msg( qq{... done} );
 }
 
-sub process_file {
+sub process_content {
     my ($args, $dir, $filename) = @_;
 
     # nothing to do with directories
     return if -d $filename;
+
+    # ignore backup files
+    return if $filename =~ m{ ~ \z }xms;
 
     my ($name, $path, $basename, $ext) = my_fileparse( $filename );
     field('Found', $name);
     field('Basename', $basename);
     field('Ext', $ext);
 
+    my $template = Template->new({
+        INCLUDE_PATH => $args->{lib},
+    });
+
+    # read the file in and split off the data portion
+    my ($data, $content) = read_content_file(qq{$args->{src}/$dir/$filename});
+
     # let's process it in the correct way
     if ( $ext eq 'html' ) {
-        #msg( q{Doing a Phliky file} );
-        my $page = read_file( qq{$args->{src}/$dir/$filename} );
-        # print $page;
+        # nice and simple, it's already HTML
     }
     elsif ( $ext eq 'flk' ) {
-        #msg( q{Doing a Phliky file} );
+        my $phliky = Text::Phliky->new({ mode => 'basic' });
+        $content = $phliky->text2html( $content );
     }
     elsif ( $ext eq 'xml' ) {
         #msg( q{Doing an XML file} );
@@ -128,12 +152,39 @@ sub process_file {
     elsif ( $ext eq 'yaml' ) {
         #msg( q{Doing a YAML file} );
     }
-    field( 'Written', qq{$args->{dest}/$dir/$basename.html} );
-    msg();
+
+    my $html;
+    $template->process( \$content, $data, \$html );
+    return ($data, $html);
 }
 
 sub template_file {
     
+}
+
+sub read_content_file {
+    my ($filename) = @_;
+
+    my $contents = read_file( $filename );
+    my ($data_block, $content) = split('-' x 79 . "\n", $contents, 2);
+
+    unless ( defined $content ) {
+        $content = $data_block;
+        $data_block = '';
+    }
+
+    my $data = {};
+
+    # figure out what kind of data this is
+    if ( 1 ) {
+        my @lines = split(/\n/, $data_block);
+        foreach my $line ( @lines ) {
+            my ($key, $value) = $line =~ m{ \A (\w+)\s*:\s+(.*) \z }xms;
+            $data->{$key} = $value;
+        }
+    }
+
+    return ($data, $content);
 }
 
 ## ----------------------------------------------------------------------------
