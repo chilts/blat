@@ -158,10 +158,6 @@ sub process_content {
     return ($data, $html);
 }
 
-sub template_file {
-    
-}
-
 sub read_content_file {
     my ($filename) = @_;
 
