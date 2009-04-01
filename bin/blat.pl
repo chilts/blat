@@ -12,6 +12,8 @@ use File::Slurp;
 use Text::ScriptHelper qw( :all );
 use Text::Phliky;
 use Template;
+use YAML qw( LoadFile );
+use XML::Simple;
 
 my @IN_OPTS = qw(
                   src=s    s>src
@@ -103,7 +105,7 @@ sub process_dir {
         next unless defined $content;
         $data->{content} = $content;
 
-        my ($name, $path, $basename, $ext) = my_fileparse( $filename );
+        my ($name, $path, $basename, $ext) = my_fileparse( $args, $filename );
 
         # $template->process( \$output, $data, qq{$args->{dest}/$dir/$basename.html});
         # print Dumper($data);
@@ -126,36 +128,45 @@ sub process_content {
     # ignore backup files
     return if $filename =~ m{ ~ \z }xms;
 
-    my ($name, $path, $basename, $ext) = my_fileparse( $filename );
+    my ($name, $path, $basename, $ext) = my_fileparse( $args, $filename );
     field('Found', $name);
     field('Basename', $basename);
     field('Ext', $ext);
 
+    my ($data, $content);
     my $template = Template->new({
         INCLUDE_PATH => $args->{lib},
     });
 
-    # read the file in and split off the data portion
-    my ($data, $content) = read_content_file(qq{$args->{src}/$dir/$filename});
+    my $full_filename = qq{$args->{src}/$dir/$filename};
 
     # let's process it in the correct way
     if ( $ext eq 'html' ) {
-        # nice and simple, it's already HTML
+        # read the file in and split off the data portion
+        ($data, $content) = read_content_file( qq{$args->{src}/$dir/$filename} );
     }
     elsif ( $ext eq 'flk' ) {
+        # read the file in and split off the data portion
+        ($data, $content) = read_content_file( qq{$args->{src}/$dir/$filename} );
+
+        # now convert Phliky into HTML
         my $phliky = Text::Phliky->new({ mode => 'basic' });
         $content = $phliky->text2html( $content );
     }
     elsif ( $ext eq 'xml' ) {
-        #msg( q{Doing an XML file} );
+        $data = XMLin( $full_filename );
+        print Dumper($data);
     }
     elsif ( $ext eq 'yaml' ) {
-        #msg( q{Doing a YAML file} );
+        $data = LoadFile( $full_filename );
+    }
+    else {
+        return;
     }
 
-    my $html;
-    $template->process( \$content, $data, \$html );
-    return ($data, $html);
+    # now process the HTML
+    $template->process( $data->{template}, $data, \$content );
+    return ($data, $content);
 }
 
 sub read_content_file {
@@ -207,7 +218,7 @@ sub files_in_dir {
 }
 
 sub my_fileparse {
-    my ($filename) = @_;
+    my ($args, $filename) = @_;
 
     my ($name, $path, $basename, $ext);
 
