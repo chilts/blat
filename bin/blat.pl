@@ -14,6 +14,7 @@ use Text::Phliky;
 use Template;
 use YAML qw( LoadFile );
 use XML::Simple;
+use JSON::Any;
 
 my @IN_OPTS = qw(
                   src=s    s>src
@@ -143,7 +144,12 @@ sub process_content {
     # let's process it in the correct way
     if ( $ext eq 'html' ) {
         # read the file in and split off the data portion
-        ($data, $content) = read_content_file( qq{$args->{src}/$dir/$filename} );
+        my $tmp_content;
+        ($data, $tmp_content) = read_content_file( qq{$args->{src}/$dir/$filename} );
+
+        # template in the data to the content
+        $template->process( \$tmp_content, $data, \$content );
+
     }
     elsif ( $ext eq 'flk' ) {
         # read the file in and split off the data portion
@@ -152,20 +158,32 @@ sub process_content {
         # now convert Phliky into HTML
         my $phliky = Text::Phliky->new({ mode => 'basic' });
         $content = $phliky->text2html( $content );
+
+        # template in the data to the content
+        $template->process( \$content, $data, \$content );
+
     }
     elsif ( $ext eq 'xml' ) {
         $data = XMLin( $full_filename );
-        print Dumper($data);
+        $template->process( $data->{template}, $data, \$content );
+
     }
     elsif ( $ext eq 'yaml' ) {
         $data = LoadFile( $full_filename );
+        $template->process( $data->{template}, $data, \$content );
+
+    }
+    elsif ( $ext eq 'json' ) {
+        my $j = JSON::Any->new();
+        my $lines = read_file( $full_filename );
+        $data = $j->jsonToObj( $lines );
+        $template->process( $data->{template}, $data, \$content );
+
     }
     else {
         return;
     }
 
-    # now process the HTML
-    $template->process( $data->{template}, $data, \$content );
     return ($data, $content);
 }
 
