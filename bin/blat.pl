@@ -202,6 +202,7 @@ sub read_content_file {
 
     # figure out what kind of data this is
     if ( 1 ) {
+        # for now, just presume "key: value" pairs (one on each line)
         my @lines = split(/\n/, $data_block);
         foreach my $line ( @lines ) {
             my ($key, $value) = $line =~ m{ \A (\w+)\s*:\s+(.*) \z }xms;
