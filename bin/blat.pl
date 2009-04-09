@@ -70,7 +70,23 @@ MAIN: {
         Getopt::Mixed::abortMsg('specify a lib (template) directory')
     }
 
+    # get a list of all directories
     my @dirs = all_dirs_from_here( $args->{src} );
+
+    # get all the '.data.json' files from all directories encountered
+    my $data = {};
+    foreach my $dir ( @dirs ) {
+        print "$dir\n";
+        next unless -f "$args->{src}/$dir/.data.json";
+
+        my $j = JSON::Any->new();
+        my $lines = read_file( "$args->{src}/$dir/.data.json" );
+        $data->{$dir} = $j->jsonToObj( $lines );
+    }
+    print Dumper( $data );
+    exit;
+
+    # process all files in each directory
     foreach my $dir ( @dirs ) {
         process_dir( $args, $dir );
     }
