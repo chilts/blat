@@ -74,21 +74,19 @@ MAIN: {
     my @dirs = all_dirs_from_here( $args->{src} );
 
     # get all the '.data.json' files from all directories encountered
-    my $data = {};
+    my $gdata = {};
     foreach my $dir ( @dirs ) {
         print "$dir\n";
         next unless -f "$args->{src}/$dir/.data.json";
 
         my $j = JSON::Any->new();
         my $lines = read_file( "$args->{src}/$dir/.data.json" );
-        $data->{$dir} = $j->jsonToObj( $lines );
+        $gdata->{$dir} = $j->jsonToObj( $lines );
     }
-    print Dumper( $data );
-    exit;
 
     # process all files in each directory
     foreach my $dir ( @dirs ) {
-        process_dir( $args, $dir );
+        process_dir( $args, $dir, $gdata );
     }
 
     line();
@@ -100,7 +98,7 @@ MAIN: {
 # methods
 
 sub process_dir {
-    my ($args, $dir) = @_;
+    my ($args, $dir, $gdata) = @_;
 
     my $full_dir = qq{$args->{src}/$dir};
     title( $full_dir );
@@ -117,6 +115,26 @@ sub process_dir {
         return;
     }
 
+    # let's make up the data needed for this directory
+    my $data = {};
+    my $tmp_dir = $dir;
+    while ( defined $tmp_dir ) {
+        %$data = (%$data, %{$gdata->{$tmp_dir}});
+        if ( $tmp_dir eq '' ) {
+            undef $tmp_dir;
+            next;
+        }
+        # shorten to the next one down ...
+        if ( $tmp_dir =~ m{ / }xms ) {
+            # ... if it contains a slash
+            $tmp_dir =~ s{  / \w+ \z }{}gxms;
+        }
+        else {
+            # ... if it doesn't contain a slash
+            $tmp_dir = '';
+        }
+    }
+
     foreach my $filename ( @filenames ) {
         my ($data, $content) = process_content( $args, $dir, $filename );
         next unless defined $content;
@@ -127,7 +145,7 @@ sub process_dir {
         # $template->process( \$output, $data, qq{$args->{dest}/$dir/$basename.html});
         # print Dumper($data);
         my $template = Template->new();
-        $template->process( qq{$args->{lib}/wrapper.thtml}, $data, qq{$args->{dest}/$dir/$basename.html} );
+        $template->process( qq{$args->{lib}/index.html}, $data, qq{$args->{dest}/$dir/$basename.html} );
         field( 'Written', qq{$args->{dest}/$dir/$basename.html} );
 
         msg();
