@@ -3,24 +3,17 @@
 
 use strict;
 use warnings;
+
 use Data::Dumper;
 use Getopt::Mixed "nextOption";
-use File::Find ();
-use File::Basename;
-use File::Glob ':glob';
-use File::Slurp;
-use Text::ScriptHelper qw( :all );
-use Text::Phliky;
-use Template;
-use YAML qw( LoadFile );
-use XML::Simple;
-use JSON::Any;
+
+use HTML::Blat;
 
 my @IN_OPTS = qw(
-                  src=s    s>src
-                  dest=s   d>dest
-                  lib=s    l>lib
-                  verbose  v>verbose
+                  src=s      s>src
+                  dest=s     d>dest
+                  template=s t>template
+                  verbose    v>verbose
                   help
                   version
 );
@@ -55,10 +48,10 @@ MAIN: {
         exit;
     }
 
-    # check these three directories exist
+    # remove trailing '/' then check these three directories exist
     $args->{src} =~ s{ \/* \z }{}gxms;
     $args->{dest} =~ s{ \/* \z }{}gxms;
-    $args->{lib} =~ s{ \/* \z }{}gxms;
+    $args->{template} =~ s{ \/* \z }{}gxms;
 
     unless ( defined $args->{src} && -d $args->{src} ) {
         Getopt::Mixed::abortMsg('specify a source directory')
@@ -66,9 +59,20 @@ MAIN: {
     unless ( defined $args->{dest} && -d $args->{dest} ) {
         Getopt::Mixed::abortMsg('specify a destination directory')
     }
-    unless ( defined $args->{lib} && -d $args->{lib} ) {
+    unless ( defined $args->{template} && -d $args->{template} ) {
         Getopt::Mixed::abortMsg('specify a lib (template) directory')
     }
+
+    # all input params checked, now get on with the program
+    my $blat = HTML::Blat->new();
+
+    $blat->src_dir( $args->{src} );
+    $blat->dest_dir( $args->{dest} );
+    $blat->template_dir( $args->{template} );
+
+    $blat->go();
+
+    exit;
 
     # get a list of all directories
     my @dirs = all_dirs_from_here( $args->{src} );

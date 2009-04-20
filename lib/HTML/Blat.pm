@@ -1,11 +1,25 @@
 ## ----------------------------------------------------------------------------
 package HTML::Blat;
 
-use warnings;
 use strict;
 use warnings;
+use Data::Dumper;
 use Carp;
+
 use base qw(Class::Accessor);
+
+use File::Find ();
+use File::Basename;
+use File::Glob ':glob';
+use File::Slurp;
+use Text::ScriptHelper qw( :all );
+use Text::Phliky;
+use Template;
+use YAML qw( LoadFile );
+use XML::Simple;
+use JSON::Any;
+
+__PACKAGE__->mk_accessors( qw(src_dir dest_dir template_dir dirs data) );
 
 ## ----------------------------------------------------------------------------
 
@@ -20,7 +34,7 @@ sub go {
     die "Template dir () doesn't exist" unless -d $self->template_dir;
 
     # get a list of all source directories
-    $self->find_source_dirs();
+    $self->find_dirs();
 
     # read all the '.data.json' files that we can find in each src dir
     $self->read_site_data();
@@ -36,7 +50,8 @@ sub find_dirs {
 
     my @dirs;
     File::Find::find( { wanted => sub { push @dirs, $File::Find::name if -d } }, $dir );
-    @dirs = map { s{ \A $dir/ }{}gxms && $_ } @dirs;
+    @dirs = map { $_ eq '' ? '.' : qq{./$_} } map { s{ \A $dir/ }{}gxms && $_ } @dirs;
+    # print Dumper( \@dirs );
 
     $self->dirs( \@dirs );
 }
@@ -44,128 +59,223 @@ sub find_dirs {
 sub read_site_data {
     my ($self) = @_;
 
-    $self->{data} = {};
-    my $src_dir = $self->src_dir;
+    my $src_dir = $self->src_dir();
 
     # get all the '.data.json' files from all directories encountered
-    my $gdata = {};
+    my $data = {};
     foreach my $dir ( @{ $self->dirs } ) {
-        print "$dir\n";
-        next unless -f "$src_dir/$dir/.data.json";
+        my $datafile = qq{$src_dir/$dir/.data.json};
+        next unless -f $datafile;
 
         my $j = JSON::Any->new();
-        my $lines = read_file( "$args->{src}/$dir/.data.json" );
+        my $lines = read_file( $datafile );
         # save to our data stash
-        $self->{data}{$dir} = $j->jsonToObj( $lines );
+        $data->{$dir} = $j->jsonToObj( $lines );
     }
-    
+    $self->data( $data );
+    # print Dumper( $self->data );
 }
 
 sub process {
     my ($self) = @_;
 
-    foreach my $dir ( @{ $self->dirs} ) {
-        process_dir( $dir );
+    foreach my $dir ( @{ $self->dirs } ) {
+        $self->process_dir( $dir );
     }
 }
 
 sub process_dir {
     my ($self, $dir) = @_;
+    sep();
+    msg( qq{Processing '$dir' ...} );
+
     my $full_dir = $self->src_dir . qq{/$dir};
-    # title( $full_dir );
 
     my @filenames = $self->files_in_dir( $full_dir );
-    return unless @filenames;
-
-    # get the data we need to process this directory
-    my $data = $self->get_site_data( $dir );
-    
-    foreach my $filename ( @filenames ) {
-        my ($data, $content) = $self->process_file( $dir, $filename );
-        next unless defined $content;
-        $data->{content} = $content;
-
-        my ($name, $path, $basename, $ext) = $self->fileparse( $filename );
-
-        my $template = Template->new();
-        my $dest_filename = $self->dest_dir . qq{/$dir/$basename.html};
-        $template->process( $self->template_dir . qq{/index.html}, $data, $dest_filename );
-        field( 'Written', $dest_filename );
-
-        msg();
+    unless ( @filenames ) {
+        msg( qq{- no files found in $full_dir, skipping} );
+        return;
     }
+
+    # make sure the destination dir is there
+    msg(q{Making .... '} . $self->dest_dir . qq{/$dir'});
+    mkdir $self->dest_dir . qq{/$dir};
+
+    foreach my $filename ( @filenames ) {
+        my ($name, $path, $basename, $ext) = $self->parse_filename( $filename );
+
+        line();
+        msg('Filename: ' . $filename);
+
+        # get the data we need to process this directory
+        my $data = $self->dir_data_cumulative( $dir );
+
+        my $html = $self->process_file( $dir, $filename, $data );
+        unless ( defined $html ) {
+            msg( qq{Didn't receive any html when processing '$filename'} );
+            next;
+        }
+
+        my $dest_filename = $self->dest_dir . qq{/$dir/$basename.html};
+        write_file( $dest_filename, $html );
+        msg( qq{Written '$dest_filename' ... done} );
+    }
+    line();
 }
 
+sub dir_data_cumulative {
+    my ($self, $dir) = @_;
+
+    # let's make up the data needed for this directory
+    my $data = {};
+    while ( defined $dir ) {
+        # msg( qq{t_dir=$dir} );
+
+        my $this_data = $self->dir_data( $dir );
+        %$data = (%$data, %$this_data);
+
+        $dir = $self->next_dir_up( $dir );
+    }
+
+    return $data;
+}
+
+sub next_dir_up {
+    my ($class, $dir) = @_;
+
+    return undef if $dir eq '.';
+
+    if ( $dir =~ m{ / }xms ) {
+        $dir =~ s{  / \w+ \z }{}gxms;
+    }
+    else {
+        $dir = '.';
+    }
+    return $dir;
+}
+
+sub dir_data {
+    my ($self, $dir) = @_;
+    return $self->{data}{$dir};
+}
 
 sub process_file {
-    my ($self, $dir, $filename) = @_;
+    my ($self, $dir, $filename, $data) = @_;
 
-    # nothing to do with directories
-    return if -d $filename;
+    my $full_filename = $self->src_dir . qq{/$dir/$filename};
 
-    # ignore backup files
-    return if $filename =~ m{ ~ \z }xms;
+    my ($name, $path, $basename, $ext) = $self->parse_filename( $full_filename );
+    my $local_data = {};
 
-    my ($name, $path, $basename, $ext) = my_fileparse( $args, $filename );
-    field('Found', $name);
-    field('Basename', $basename);
-    field('Ext', $ext);
-    my ($data, $content);
-    my $template = Template->new({
-        INCLUDE_PATH => $args->{lib},
-    });
-    my $full_filename = qq{$args->{src}/$dir/$filename};
-
-    # let's process it in the correct way
+    # There are two types of files:
+    # 1) Content
+    # 2) Data
+    #
+    # Content files are processed with a data section at the top, but Data files
+    # are just read in as pure data
     if ( $ext eq 'html' ) {
-        # read the file in and split off the data portion
-        my $tmp_content;
-        ($data, $tmp_content) = read_content_file( qq{$args->{src}/$dir/$filename} );
-        # template in the data to the content
-        $template->process( \$tmp_content, $data, \$content );
+        # html files have data segments
+        my $content;
+        ($local_data, $content) = $self->read_data_content( $full_filename );
+
+        # since this is already HTML, we're done making the main content
+        $local_data->{content} = $content;
     }
     elsif ( $ext eq 'flk' ) {
-        # read the file in and split off the data portion
-        ($data, $content) = read_content_file( qq{$args->{src}/$dir/$filename} );
+        # flk files have data segments
+        my $content;
+        ($local_data, $content) = $self->read_data_content( $full_filename );
+
+        print '---' . "\n";
+        print Dumper($local_data);
+        print $content, "\n";
+        print '---' . "\n";
+
         # now convert Phliky into HTML
         my $phliky = Text::Phliky->new({ mode => 'basic' });
         $content = $phliky->text2html( $content );
-        # template in the data to the content
-        $template->process( \$content, $data, \$content );
-    }
-    elsif ( $ext eq 'xml' ) {
-        $data = XMLin( $full_filename );
-        $template->process( $data->{template}, $data, \$content );
-    }
-    elsif ( $ext eq 'yaml' ) {
-        $data = LoadFile( $full_filename );
-        $template->process( $data->{template}, $data, \$content );
+
+        $local_data->{content} = $phliky->text2html( $content );
     }
     elsif ( $ext eq 'json' ) {
         my $j = JSON::Any->new();
         my $lines = read_file( $full_filename );
-        $data = $j->jsonToObj( $lines );
-        $template->process( $data->{template}, $data, \$content );
+        $local_data = $j->jsonToObj( $lines );
+    }
+    elsif ( $ext eq 'xml' ) {
+        $local_data = XMLin( $full_filename );
+    }
+    elsif ( $ext eq 'yaml' ) {
+        $local_data = LoadFile( $full_filename );
     }
     else {
         return;
     }
-    return ($data, $content);
+
+    # save the local data over the parent's data
+    %$data = (%$data, %$local_data);
+
+    unless ( defined $data->{template} ) {
+        msg("No template found");
+        return;
+    }
+
+    # now we can process this as normal since we have:
+    # 1) html (in $local_data->{content})
+    # 2) global $data
+
+    # now we have both the data (may be empty) and the content (possibly blank)
+    # so let's process the page if available
+    my $html;
+    my $template = Template->new({
+        INCLUDE_PATH => $self->template_dir,
+    });
+    $template->process( $data->{template}, $data, \$html )
+        || die $template->error;
+
+    return ($html);
 }
 
+sub read_data_content {
+    my ($class, $filename) = @_;
+
+    my $contents = read_file( $filename );
+    # this should be done in a better way :)
+    my ($data_block, $content) = split('-' x 79 . "\n", $contents, 2);
+
+    unless ( defined $content ) {
+        $content = $data_block;
+        $data_block = '';
+    }
+
+    # get the JSON encoded data from the data portion
+    my $j = JSON::Any->new();
+    # save to our data stash
+    my $data = $j->jsonToObj( $data_block );
+
+    return ($data, $content);
+}
 
 ## ----------------------------------------------------------------------------
 # class (helper) methods
 sub files_in_dir {
     my ($class, $dir) = @_;
+
     # find all the files in this dir
     my @filenames = bsd_glob( qq{$dir/*} );
+
+    # only get the plan files (not directories)
     @filenames = grep { -f } @filenames;
+
+    # remove backup filenames
+    @filenames = grep { $_ !~ m{ ~ \z }xms } @filenames;
+
+    # map all these on to just the src dir
     @filenames = map { s{ \A $dir/ }{}gxms && $_ } @filenames;
     return @filenames;
 }
 
-sub fileparse {
+sub parse_filename {
     my ($class, $filename) = @_;
     my ($name, $path, $basename, $ext);
     # get the main filename and it's path first
