@@ -136,7 +136,7 @@ sub dir_data_cumulative {
         # msg( qq{t_dir=$dir} );
 
         my $this_data = $self->dir_data( $dir );
-        %$data = (%$data, %$this_data);
+        %$data = (%$this_data, %$data);
 
         $dir = $self->next_dir_up( $dir );
     }
