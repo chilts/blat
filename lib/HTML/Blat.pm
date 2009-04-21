@@ -65,7 +65,11 @@ sub read_site_data {
     my $data = {};
     foreach my $dir ( @{ $self->dirs } ) {
         my $datafile = qq{$src_dir/$dir/.data.json};
-        next unless -f $datafile;
+        unless ( -f $datafile ) {
+            # nothing there, so just make it blank
+            $data->{$dir} = {};
+            next;
+        }
 
         my $j = JSON::Any->new();
         my $lines = read_file( $datafile );
