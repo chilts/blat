@@ -197,8 +197,6 @@ sub process_file {
 
         # now convert Phliky into HTML
         my $phliky = Text::Phliky->new({ mode => 'basic' });
-        $content = $phliky->text2html( $content );
-
         $local_data->{content} = $phliky->text2html( $content );
     }
     elsif ( $ext eq 'json' ) {
