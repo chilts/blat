@@ -150,7 +150,7 @@ sub next_dir_up {
     return undef if $dir eq '.';
 
     if ( $dir =~ m{ / }xms ) {
-        $dir =~ s{  / \w+ \z }{}gxms;
+        $dir =~ s{  / [\w_-]+ \z }{}gxms;
     }
     else {
         $dir = '.';
