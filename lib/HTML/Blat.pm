@@ -190,11 +190,6 @@ sub process_file {
         my $content;
         ($local_data, $content) = $self->read_data_content( $full_filename );
 
-        print '---' . "\n";
-        print Dumper($local_data);
-        print $content, "\n";
-        print '---' . "\n";
-
         # now convert Phliky into HTML
         my $phliky = Text::Phliky->new({ mode => 'basic' });
         $local_data->{content} = $phliky->text2html( $content );
