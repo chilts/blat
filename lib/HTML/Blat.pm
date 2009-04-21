@@ -234,6 +234,7 @@ sub process_file {
     my $template = Template->new({
         INCLUDE_PATH => $self->template_dir,
     });
+    msg( qq{Template: $data->{template}} );
     $template->process( $data->{template}, $data, \$html )
         || die $template->error;
 
