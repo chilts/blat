@@ -141,6 +141,8 @@ sub dir_data_cumulative {
         $dir = $self->next_dir_up( $dir );
     }
 
+    # print Data::Dumper->Dump([$data], ['dir_data_cumulative']);
+
     return $data;
 }
 
