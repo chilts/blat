@@ -114,14 +114,14 @@ sub process_dir {
         # get the data we need to process this directory
         my $data = $self->dir_data_cumulative( $dir );
 
-        my $html = $self->process_file( $dir, $filename, $data );
-        unless ( defined $html ) {
-            msg( qq{Didn't receive any html when processing '$filename'} );
+        my ($output, $filename) = $self->process_file( $dir, $filename, $data );
+        unless ( defined $output ) {
+            msg( qq{Didn't receive any output when processing '$filename'} );
             next;
         }
 
-        my $dest_filename = $self->dest_dir . qq{/$dir/$basename.html};
-        write_file( $dest_filename, $html );
+        my $dest_filename = $self->dest_dir . qq{/$dir/} . ( defined $filename ? $filename : qq{$basename.html});
+        write_file( $dest_filename, $output );
         msg( qq{Written '$dest_filename' ... done} );
     }
     line();
@@ -196,6 +196,25 @@ sub process_file {
         my $phliky = Text::Phliky->new({ mode => 'basic' });
         $local_data->{content} = $phliky->text2html( $content );
     }
+    elsif ( $ext eq 'txt' ) {
+        # txt files have data segments and we template in the rest
+        my $content;
+        ($local_data, $content) = $self->read_data_content( $full_filename );
+
+        my $text;
+        my $template = Template->new({
+            INCLUDE_PATH => $self->template_dir,
+        });
+        $template->process( \$content, $data, \$text )
+            || die $template->error;
+
+        print '|' x 79, "\n";
+        print "text=$text\n";
+        print '|' x 79, "\n";
+
+        # save this new content
+        $local_data->{content} = $text;
+    }
     elsif ( $ext eq 'json' ) {
         my $j = JSON::Any->new();
         my $lines = read_file( $full_filename );
@@ -233,7 +252,7 @@ sub process_file {
     $template->process( $data->{template}, $data, \$html )
         || die $template->error;
 
-    return ($html);
+    return ($html, $data->{filename});
 }
 
 sub read_data_content {
