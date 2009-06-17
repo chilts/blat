@@ -264,7 +264,8 @@ sub read_data_content {
 
     unless ( defined $content ) {
         $content = $data_block;
-        $data_block = '';
+        # empty data
+        $data_block = '{}';
     }
 
     # get the JSON encoded data from the data portion
