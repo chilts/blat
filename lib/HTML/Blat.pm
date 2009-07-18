@@ -197,23 +197,12 @@ sub process_file {
         $local_data->{content} = $phliky->text2html( $content );
     }
     elsif ( $ext eq 'txt' ) {
-        # txt files have data segments and we template in the rest
+        # txt files can have data segments but we don't template anything in
         my $content;
         ($local_data, $content) = $self->read_data_content( $full_filename );
 
-        my $text;
-        my $template = Template->new({
-            INCLUDE_PATH => $self->template_dir,
-        });
-        $template->process( \$content, $data, \$text )
-            || die $template->error;
-
-        print '|' x 79, "\n";
-        print "text=$text\n";
-        print '|' x 79, "\n";
-
-        # save this new content
-        $local_data->{content} = $text;
+        # save this text content
+        $local_data->{content} = $content;
     }
     elsif ( $ext eq 'json' ) {
         my $j = JSON::Any->new();
@@ -227,7 +216,9 @@ sub process_file {
         $local_data = LoadFile( $full_filename );
     }
     else {
-        return;
+        # just copy this file to the output dir
+        my $contents = read_file( $full_filename );
+        return ( $contents, $filename );
     }
 
     # save the local data over the parent's data
