@@ -31,130 +31,73 @@ use constant VERSION => '0.1';
 
     for my $dir ( qw(src dest template) ) {
         $opt->{$dir} =~ s{ \/+ \z }{}gxms;
-        verbose( q{opt{$dir} = $opt->{$dir}} );
+        debug( qq{opt{$dir}: $opt->{$dir}} );
     }
-
-    print "Opt:\n";
-    pp($opt);
-    print "Cfg:\n";
-    pp($cfg);
+    debug( q{} );
 
     # find all the source files and split into 'pages' and 'data'
     my $site = get_files( $opt->{src} );
-    print "Site:\n";
-    pp($site);
-
-    # load up all the datafiles and store the data against their page (if they have a 'for' attribute)
-    #while ( my ($filename, $struct) = each %{$site->{data}} ) {
-    #    print "$filename:\n";
-    #    # my $data = JSON::Any->jsonToObj( scalar read_file($struct->{fullname}) );
-    #    if ( defined $struct->{data}{'for'} ) {
-    #        print "* this data is for '$struct->{data}{'for'}'\n";
-    #
-    #        # ok, we have a 'for' attribute, so see if we have an equivalent datafile
-    #        my $page = qq{$struct->{dir}/$struct->{data}{for}};
-    #        print "* page=$page\n";
-    #        if ( exists $site->{page}{$page} ) {
-    #            print "* yes, we have a page file for this data\n";
-    #            # yes, we have a page file
-    #            $site->{page}{$page}{data} = $struct->{data};
-    #
-    #            # no longer need the .json structure in $site->{data}
-    #            delete $site->{data}{$filename};
-    #        }
-    #        else {
-    #            print "* no page file exists, normal JSON\n";
-    #            # no equivalent file, so this JSON file is a literal
-    #            # do nothing
-    #        }
-    #    }
-    #    else {
-    #        print "* for isn't defined, normal JSON\n";
-    #        # 'for' isn't defined, so it's just a JSON literal
-    #        # do nothing
-    #    }
-    #}
 
     # set up the template
     my $template = Template->new({
         INCLUDE_PATH => $opt->{template},
     });
-    
+
     # finally, loop through all the pages and template them in
+    verbose( q{} );
     while ( my ($filename, $struct) = each %{$site->{page}} ) {
-        print '=' x 79, "\n";
-        print "$filename:\n";
-
-        # if this file doesn't have any data, it's _not_ meant to be templated
-        # so just copy it over
-        unless ( defined $struct->{data} ) {
-            # copy ...
-            next;
-        }
-
-        # Set up all the data for this file
-
         # ToDo: should go up the levels, rather than just (site, section, file);
         # should be (site, parent sections..., section, file).
-        print "* setting up data\n";
         my $data = { %{$site->{site}{data}}, %{$site->{section}{$struct->{dir}}{data}}, %{$struct->{data}} };
-        pp($data);
 
-        print "* reading file in\n";
+        # read the file in, then process it
         my $raw = read_file( $struct->{fullname} );
-        my $content;
         my $outfile;
         if ( $filename =~ m{\.html\z}xms ) {
-            print "* normal HTML\n";
             # just save as-is
-            $content = $raw;
+            $data->{content} = $raw;
             $outfile = qq{$opt->{dest}/$struct->{dir}/$struct->{filename}};
         }
         elsif ( $filename =~ m{\.md\z}xms ) {
             # process as markdown
-            $content = markdown( $raw );
+            $data->{content} = markdown( $raw );
             $outfile = qq{$opt->{dest}/$struct->{dir}/$struct->{filename}};
             $outfile =~ s{\.md\z}{.html}gxms;
         }
         elsif ( $filename =~ m{\.markdown\z}xms ) {
             # process as markdown
-            $content = markdown( $raw );
+            $data->{content} = markdown( $raw );
             $outfile = qq{$opt->{dest}/$struct->{dir}/$struct->{filename}};
             $outfile =~ s{\.markdown\z}{.html}gxms;
         }
         elsif ( $filename =~ m{\.textile\z}xms ) {
             # process as markdown
-            $content = textile( $raw );
+            $data->{content} = textile( $raw );
             $outfile = qq{$opt->{dest}/$struct->{dir}/$struct->{filename}};
             $outfile =~ s{\.textile\z}{.html}gxms;
         }
         elsif ( $filename =~ m{\.txt\z}xms ) {
             # process as plain text
-            $content = q{<pre>} . encode_entities($raw) . q{<pre>};
+            $data->{content} = q{<pre>} . encode_entities($raw) . q{<pre>};
             $outfile = qq{$opt->{dest}/$struct->{dir}/$struct->{filename}};
             $outfile =~ s{\.txt\z}{.html}gxms;
         }
         else {
             # ToDo: WikiCreole?
             # ToDo: WikiFormat?
-            print STDERR qq{Error: unknown filetype\n};
+            print STDERR qq{Warning: unknown filetype, skipping};
+            next;
         }
-
-        # save the content to the data store
-        $data->{content} = $content;
 
         # process this file
         my $output = '';
-        print "template: $data->{template}\n";
         unless ( $template->process( $data->{template}, $data, \$output ) ) {
-            print "* something went wrong:" . $template->error() . "\n";
+            print STDERR q{* something went wrong, skipping: } . $template->error() . qq{\n};
+            next;
         }
-        print '-' x 79, "\n";
-        print $output, "\n";
-        print '-' x 79, "\n";
 
         # write the output file
-        print "* outfile=$outfile\n";
+        verbose( qq{Written $outfile} );
         write_file( $outfile, $output );
     }
 }
@@ -163,43 +106,49 @@ use constant VERSION => '0.1';
 
 sub get_files {
     my ($dir) = @_;
+
     my $file = {};
 
     find(
         sub {
             my ($cwd, $filename, $fullname) = ($File::Find::dir, $_, $File::Find::name);
-            print "filename=$filename:\n";
 
-            # remove the initial thing
-            # print "cwd=$cwd\n";
+            # if this isn't a regular file, skip it
+            return if -d $filename;
+            return if $filename eq q{.};
+            unless ( -f $filename ) {
+                print STDERR qq{Warning: not a regular file ($filename), skipping\n};
+                return;
+            };
+
+            # remove the initial directory
             $cwd =~ s{\A$dir}{}gxms; # remove the initial dir
             $cwd =~ s{\A\/+}{}gxms; # remove leading slashes
             $cwd = '.' if $cwd eq ''; # make it '.' if nothing left
-            # print "-> cwd=$cwd\n";
-
-            # only save files
-            return unless -f $filename;
 
             # make the appropriate key for the $site->{page} hash
             my $key = length($cwd) ? qq{$cwd/$filename} : $filename;
-            print "* key=$key\n";
 
             # figure out what we're looking at
             if ( $filename eq '.site.json' ) {
-                # print "site : cwd=$cwd, dir=$dir\n";
-                if ( $cwd eq '.' ) {
-                    $file->{site} = {
-                        dir      => $cwd,
-                        filename => $filename,
-                        fullname => $fullname,
-                        data     => get_data( $filename ),
-                    }
+                # only save the site data file if it's in the top-level
+                unless ( $cwd eq '.' ) {
+                    print STDERR qq{Warning: Site file '$filename' ignored since not in top-level\n};
+                    return;
                 }
-                else {
-                    print STDERR qq{Site file '$filename' ignored since not in top-level\n};
+
+                # got the main .site.json file
+                verbose( qq{Found site data: .site.json} );
+                $file->{site} = {
+                    dir      => $cwd,
+                    filename => $filename,
+                    fullname => $fullname,
+                    data     => get_data( $filename ),
                 }
             }
             elsif ( $filename eq '.section.json' ) {
+                # a regular section data file
+                verbose( qq{Found section data: $cwd/.section.json file} );
                 $file->{section}{$cwd} = {
                     dir      => $cwd,
                     filename => $filename,
@@ -209,40 +158,27 @@ sub get_files {
             }
             elsif ( $filename =~ m{\.json\z}xms ) {
                 # if there is a file which corresponds with this one, save the data straight away
-                # my $other = $cwd . '/' . substr($filename, 0, -5);
                 my $other = substr($filename, 0, -5);
-                print "* other=$other\n";
-                if ( -f $other ) {
-                    print "* found a content file\n";
-                    $file->{page}{qq{$cwd/$other}}{data} = get_data( $filename );
+                unless ( -f $other ) {
+                    print STDERR qq{Warning: Found .json file ($filename) which doesn't have a page file, skipping\n};
+                    return;
                 }
-                else {
-                    print "* no content file\n";
-                    $file->{data}{$key} = {
-                        dir      => $cwd,
-                        filename => $filename,
-                        fullname => $fullname,
-                    }
-                }
+                verbose( qq{Found data: $cwd/$filename} );
+                $file->{page}{qq{$cwd/$other}}{data} = get_data( $filename );
             }
             else {
-                # save the various _known_ files elsewhere
-                # Note: have to do this separately, in case the {data} has already been loaded up
-                print "* got a content page\n";
-                if ( exists $file->{page}{$key} ) {
-                    print "* $key already exists\n";
-                    $file->{page}{$key}{dir} = $cwd;
-                    $file->{page}{$key}{filename} = $filename;
-                    $file->{page}{$key}{fullname} = $fullname;
+                # make sure that a datafile is present for this content file
+                unless ( -f qq{$filename.json} ) {
+                    print STDERR qq{Error: found page file ($filename) with missing data file\n};
+                    return;
                 }
-                else {
-                    print "* $key is new\n";
-                    $file->{page}{$key} = {
-                        dir      => $cwd,
-                        filename => $filename,
-                        fullname => $fullname,
-                    };
-                }
+
+                verbose( qq{Found page: $cwd/$filename} );
+
+                # save these separately (in case the $file->{page}{$key} already exists
+                $file->{page}{$key}{dir} = $cwd;
+                $file->{page}{$key}{filename} = $filename;
+                $file->{page}{$key}{fullname} = $fullname;
             }
         },
         $dir
@@ -265,6 +201,7 @@ sub get_opt {
         dest=s     d>dest
         template=s t>template
         verbose    v>verbose
+        debug      d>debug
         filename   f>filename
         help
         version
@@ -278,7 +215,7 @@ sub get_opt {
     Getopt::Mixed::cleanup();
 
     # process the boolean options
-    foreach my $name ( qw(verbose help version) ) {
+    foreach my $name ( qw(verbose debug help version) ) {
         $opt->{$name} = exists $opt->{$name} ? 1 : 0;
     }
 
@@ -329,9 +266,14 @@ Usage: $0 <>
 
 Options: ...
 
- * src              the source directory (default: src)
- * dest             the destination directory (default: htdocs)
- * template         the template directory (default: tt)
+ -s, --src              the source directory (default: src)
+ -d, --dest             the destination directory (default: htdocs)
+ -t, --template         the template directory (default: tt)
+     --version          version
+     --help             help
+     --verbose          verbose
+     --debug            debug
+
 
 EOF
 }
