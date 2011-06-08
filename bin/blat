@@ -200,9 +200,9 @@ sub get_opt {
         src=s      s>src
         dest=s     d>dest
         template=s t>template
-        verbose    v>verbose
-        debug      d>debug
         filename   f>filename
+        verbose    v>verbose
+        debug
         help
         version
     );
