@@ -38,6 +38,8 @@ use constant VERSION => '0.1';
     # find all the source files and split into 'pages' and 'data'
     my $site = get_files( $opt->{src} );
 
+    # ToDo: make sure we have a .site.json file and all the .section.json files we need
+
     # set up the template
     my $template = Template->new({
         INCLUDE_PATH => $opt->{template},
@@ -48,6 +50,11 @@ use constant VERSION => '0.1';
     while ( my ($filename, $struct) = each %{$site->{page}} ) {
         # ToDo: should go up the levels, rather than just (site, section, file);
         # should be (site, parent sections..., section, file).
+
+        $site->{site}{data} ||= {};
+        $site->{section}{$struct->{dir}}{data} ||= {};
+
+        # ToDo: need to change to inherit from multiple levels
         my $data = { %{$site->{site}{data}}, %{$site->{section}{$struct->{dir}}{data}}, %{$struct->{data}} };
 
         # read the file in, then process it
@@ -91,13 +98,21 @@ use constant VERSION => '0.1';
 
         # process this file
         my $output = '';
-        unless ( $template->process( $data->{template}, $data, \$output ) ) {
+        my $template_data = {
+            data => $data,
+            blat => {
+                # ToDo: this only copes with 1 level so far - make it more generic
+                paths => [ $site->{section}{'.'}{data}, ( $struct->{dir} eq q{.} ? () : $site->{section}{$struct->{dir}}{data} ), $struct->{data} ],
+            },
+        };
+        unless ( $template->process( $data->{template}, $template_data, \$output ) ) {
             print STDERR q{* something went wrong, skipping: } . $template->error() . qq{\n};
             next;
         }
 
         # write the output file
         verbose( qq{Written $outfile} );
+        mkdir qq{$opt->{dest}/$struct->{dir}};
         write_file( $outfile, $output );
     }
 }
