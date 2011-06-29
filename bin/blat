@@ -7,6 +7,7 @@ use Data::Dump qw(pp);
 use Getopt::Mixed "nextOption";
 use Config::Simple;
 use File::Find;
+use File::Path;
 use JSON::Any;
 use File::Slurp;
 use Template;
@@ -112,7 +113,7 @@ use constant VERSION => '0.1';
 
         # write the output file
         verbose( qq{Written $outfile} );
-        mkdir qq{$opt->{dest}/$struct->{dir}};
+        mkpath( qq{$opt->{dest}/$struct->{dir}} );
         write_file( $outfile, $output );
     }
 }
