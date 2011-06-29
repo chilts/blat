@@ -97,15 +97,34 @@ use constant VERSION => '0.1';
             next;
         }
 
+        # get a bit of all the paths
+        my @parts = split('/', $struct->{dir});
+        print "parts=@parts\n";
+        my $path;
+        my @sections = ( q{.} );
+        foreach my $part ( @parts ) {
+            if ( defined $path ) {
+                $path .= qq{/$part};
+            }
+            else {
+                $path = $part;
+            }
+            push @sections, $path;
+        }
+
         # process this file
         my $output = '';
         my $template_data = {
             data => $data,
             blat => {
                 # ToDo: this only copes with 1 level so far - make it more generic
-                paths => [ $site->{section}{'.'}{data}, ( $struct->{dir} eq q{.} ? () : $site->{section}{$struct->{dir}}{data} ), $struct->{data} ],
+                # parents => [ $site->{section}{'.'}{data}, ( $struct->{dir} eq q{.} ? () : $site->{section}{$struct->{dir}}{data} ), $struct->{data} ],
             },
         };
+        foreach my $section ( @sections ) {
+            push @{$template_data->{blat}{parents}}, $site->{section}{$section}{data};
+        }
+
         unless ( $template->process( $data->{template}, $template_data, \$output ) ) {
             print STDERR q{* something went wrong, skipping: } . $template->error() . qq{\n};
             next;
