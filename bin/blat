@@ -56,7 +56,10 @@ use constant VERSION => '0.1';
     debug( q{} );
 
     # find all the source files and split into 'pages' and 'data'
-    my $site = get_files( $opt->{src} );
+    my ($site, $section, $page) = get_files( $opt->{src} );
+    # pp($site);
+    # pp($section);
+    # pp($page);
 
     # ToDo: make sure we have a .site.json file and all the .section.json files we need
 
@@ -67,14 +70,14 @@ use constant VERSION => '0.1';
 
     # finally, loop through all the pages and template them in
     verbose( q{} );
-    while ( my ($filename, $metadata) = each %{$site->{page}} ) {
-        $site->{site}{data} ||= {};
-        $site->{section}{$metadata->{dir}}{data} ||= {};
+    while ( my ($filename, $metadata) = each %$page ) {
+        $site->{data} ||= {};
+        $section->{$metadata->{dir}}{data} ||= {};
 
         # ToDo: should go up the levels, rather than just (site, section, file);
         # should be (site, parent sections..., section, file).
         # ToDo: need to change to inherit from multiple levels
-        my $data = { %{$site->{site}{data}}, %{$site->{section}{$metadata->{dir}}{data}}, %{$metadata->{data}} };
+        my $data = { %{$site->{data}}, %{$section->{$metadata->{dir}}{data}}, %{$metadata->{data}} };
 
         # read the file in, then process it
         my $raw = read_file( $metadata->{fullname} );
@@ -136,11 +139,11 @@ use constant VERSION => '0.1';
             data => $data,
             blat => {
                 # ToDo: this only copes with 1 level so far - make it more generic
-                # parents => [ $site->{section}{'.'}{data}, ( $metadata->{dir} eq q{.} ? () : $site->{section}{$metadata->{dir}}{data} ), $metadata->{data} ],
+                # parents => [ $section->{'.'}{data}, ( $metadata->{dir} eq q{.} ? () : $section->{$metadata->{dir}}{data} ), $metadata->{data} ],
             },
         };
-        foreach my $section ( @sections ) {
-            push @{$template_data->{blat}{parents}}, $site->{section}{$section}{data};
+        foreach my $section_name ( @sections ) {
+            push @{$template_data->{blat}{parents}}, $section->{$section_name}{data};
         }
 
         unless ( $template->process( $data->{template}, $template_data, \$output ) ) {
@@ -160,7 +163,10 @@ use constant VERSION => '0.1';
 sub get_files {
     my ($dir) = @_;
 
-    my $file = {};
+    # save each thing in it's own data structure
+    my $site = {};
+    my $section = {};
+    my $page = {};
 
     find(
         sub {
@@ -179,7 +185,7 @@ sub get_files {
             $cwd =~ s{\A\/+}{}gxms; # remove leading slashes
             $cwd = '.' if $cwd eq ''; # make it '.' if nothing left
 
-            # make the appropriate key for the $site->{page} hash
+            # make the appropriate key for the %$page hash
             my $key = length($cwd) ? qq{$cwd/$filename} : $filename;
 
             # figure out what we're looking at
@@ -192,7 +198,7 @@ sub get_files {
 
                 # got the main .site.json file
                 verbose( qq{Found site data: .site.json} );
-                $file->{site} = {
+                $site = {
                     dir      => $cwd,
                     filename => $filename,
                     fullname => $fullname,
@@ -202,7 +208,7 @@ sub get_files {
             elsif ( $filename eq '.section.json' ) {
                 # a regular section data file
                 verbose( qq{Found section data: $cwd/.section.json file} );
-                $file->{section}{$cwd} = {
+                $section->{$cwd} = {
                     dir      => $cwd,
                     filename => $filename,
                     fullname => $fullname,
@@ -217,7 +223,7 @@ sub get_files {
                     return;
                 }
                 verbose( qq{Found data: $cwd/$filename} );
-                $file->{page}{qq{$cwd/$other}}{data} = get_data( $filename );
+                $page->{qq{$cwd/$other}}{data} = get_data( $filename );
             }
             else {
                 # make sure that a datafile is present for this content file
@@ -228,16 +234,16 @@ sub get_files {
 
                 verbose( qq{Found page: $cwd/$filename} );
 
-                # save these separately (in case the $file->{page}{$key} already exists
-                $file->{page}{$key}{dir} = $cwd;
-                $file->{page}{$key}{filename} = $filename;
-                $file->{page}{$key}{fullname} = $fullname;
+                # save these separately (in case the $page->{$key} already exists
+                $page->{$key}{dir} = $cwd;
+                $page->{$key}{filename} = $filename;
+                $page->{$key}{fullname} = $fullname;
             }
         },
         $dir
     );
 
-    return $file;
+    return ($site, $section, $page);
 }
 
 sub get_data {
