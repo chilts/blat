@@ -56,6 +56,7 @@ use constant VERSION => '0.1';
     debug( q{} );
 
     # find all the source files and split into 'pages' and 'data'
+    title( qq{Finding Files} );
     my ($site, $section, $page) = get_files( $opt->{src} );
     # pp($site);
     # pp($section);
@@ -72,7 +73,7 @@ use constant VERSION => '0.1';
     });
 
     # finally, loop through all the pages and template them in
-    verbose( q{} );
+    title( qq{Processing Files} );
     while ( my ($filename, $metadata) = each %$page ) {
         # default the section data to nothing
         $section->{$metadata->{dir}}{data} ||= {};
@@ -303,6 +304,12 @@ sub get_cfg {
     Config::Simple->import_from( $filename, $cfg );
 
     return $cfg;
+}
+
+sub title {
+    my ($title) = @_;
+    my $msg = q{--- } . $title . q{ ---} . q{-} x (71-(length($title)) );
+    verbose($msg);
 }
 
 sub verbose {
