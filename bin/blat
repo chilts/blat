@@ -67,46 +67,45 @@ use constant VERSION => '0.1';
 
     # finally, loop through all the pages and template them in
     verbose( q{} );
-    while ( my ($filename, $struct) = each %{$site->{page}} ) {
+    while ( my ($filename, $metadata) = each %{$site->{page}} ) {
+        $site->{site}{data} ||= {};
+        $site->{section}{$metadata->{dir}}{data} ||= {};
+
         # ToDo: should go up the levels, rather than just (site, section, file);
         # should be (site, parent sections..., section, file).
-
-        $site->{site}{data} ||= {};
-        $site->{section}{$struct->{dir}}{data} ||= {};
-
         # ToDo: need to change to inherit from multiple levels
-        my $data = { %{$site->{site}{data}}, %{$site->{section}{$struct->{dir}}{data}}, %{$struct->{data}} };
+        my $data = { %{$site->{site}{data}}, %{$site->{section}{$metadata->{dir}}{data}}, %{$metadata->{data}} };
 
         # read the file in, then process it
-        my $raw = read_file( $struct->{fullname} );
+        my $raw = read_file( $metadata->{fullname} );
         my $outfile;
         if ( $filename =~ m{\.html\z}xms ) {
             # just save as-is
             $data->{content} = $raw;
-            $outfile = qq{$opt->{dest}/$struct->{dir}/$struct->{filename}};
+            $outfile = qq{$opt->{dest}/$metadata->{dir}/$metadata->{filename}};
         }
         elsif ( $filename =~ m{\.md\z}xms ) {
             # process as markdown
             $data->{content} = markdown( $raw );
-            $outfile = qq{$opt->{dest}/$struct->{dir}/$struct->{filename}};
+            $outfile = qq{$opt->{dest}/$metadata->{dir}/$metadata->{filename}};
             $outfile =~ s{\.md\z}{.html}gxms;
         }
         elsif ( $filename =~ m{\.markdown\z}xms ) {
             # process as markdown
             $data->{content} = markdown( $raw );
-            $outfile = qq{$opt->{dest}/$struct->{dir}/$struct->{filename}};
+            $outfile = qq{$opt->{dest}/$metadata->{dir}/$metadata->{filename}};
             $outfile =~ s{\.markdown\z}{.html}gxms;
         }
         elsif ( $filename =~ m{\.textile\z}xms ) {
             # process as markdown
             $data->{content} = textile( $raw );
-            $outfile = qq{$opt->{dest}/$struct->{dir}/$struct->{filename}};
+            $outfile = qq{$opt->{dest}/$metadata->{dir}/$metadata->{filename}};
             $outfile =~ s{\.textile\z}{.html}gxms;
         }
         elsif ( $filename =~ m{\.txt\z}xms ) {
             # process as plain text
             $data->{content} = q{<pre>} . encode_entities($raw) . q{<pre>};
-            $outfile = qq{$opt->{dest}/$struct->{dir}/$struct->{filename}};
+            $outfile = qq{$opt->{dest}/$metadata->{dir}/$metadata->{filename}};
             $outfile =~ s{\.txt\z}{.html}gxms;
         }
         else {
@@ -117,7 +116,7 @@ use constant VERSION => '0.1';
         }
 
         # get a bit of all the paths
-        my @parts = split('/', $struct->{dir});
+        my @parts = split('/', $metadata->{dir});
         print "parts=@parts\n";
         my $path;
         my @sections = ( q{.} );
@@ -137,7 +136,7 @@ use constant VERSION => '0.1';
             data => $data,
             blat => {
                 # ToDo: this only copes with 1 level so far - make it more generic
-                # parents => [ $site->{section}{'.'}{data}, ( $struct->{dir} eq q{.} ? () : $site->{section}{$struct->{dir}}{data} ), $struct->{data} ],
+                # parents => [ $site->{section}{'.'}{data}, ( $metadata->{dir} eq q{.} ? () : $site->{section}{$metadata->{dir}}{data} ), $metadata->{data} ],
             },
         };
         foreach my $section ( @sections ) {
@@ -151,7 +150,7 @@ use constant VERSION => '0.1';
 
         # write the output file
         verbose( qq{Written $outfile} );
-        mkpath( qq{$opt->{dest}/$struct->{dir}} );
+        mkpath( qq{$opt->{dest}/$metadata->{dir}} );
         write_file( $outfile, $output );
     }
 }
