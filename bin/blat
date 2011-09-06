@@ -61,6 +61,9 @@ use constant VERSION => '0.1';
     # pp($section);
     # pp($page);
 
+    # default the site data to nothing
+    $site->{data} ||= {};
+
     # ToDo: make sure we have a .site.json file and all the .section.json files we need
 
     # set up the template
@@ -71,7 +74,7 @@ use constant VERSION => '0.1';
     # finally, loop through all the pages and template them in
     verbose( q{} );
     while ( my ($filename, $metadata) = each %$page ) {
-        $site->{data} ||= {};
+        # default the section data to nothing
         $section->{$metadata->{dir}}{data} ||= {};
 
         # ToDo: should go up the levels, rather than just (site, section, file);
