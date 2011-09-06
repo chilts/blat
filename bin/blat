@@ -103,7 +103,7 @@ use constant VERSION => '0.1';
             $outfile =~ s{\.markdown\z}{.html}gxms;
         }
         elsif ( $filename =~ m{\.textile\z}xms ) {
-            # process as markdown
+            # process as textile
             $data->{content} = textile( $raw );
             $outfile = qq{$opt->{dest}/$metadata->{dir}/$metadata->{filename}};
             $outfile =~ s{\.textile\z}{.html}gxms;
