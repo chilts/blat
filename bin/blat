@@ -75,94 +75,101 @@ use constant VERSION => '0.1';
     # finally, loop through all the pages and template them in
     title( qq{Processing Files} );
     while ( my ($filename, $metadata) = each %$page ) {
-        # default the section data to nothing
-        $section->{$metadata->{dir}}{data} ||= {};
-
-        # ToDo: should go up the levels, rather than just (site, section, file);
-        # should be (site, parent sections..., section, file).
-        # ToDo: need to change to inherit from multiple levels
-        my $data = { %{$site->{data}}, %{$section->{$metadata->{dir}}{data}}, %{$metadata->{data}} };
-
-        # read the file in, then process it
-        my $raw = read_file( $metadata->{fullname} );
-        my $outfile;
-        if ( $filename =~ m{\.html\z}xms ) {
-            # just save as-is
-            $data->{content} = $raw;
-            $outfile = qq{$opt->{dest}/$metadata->{dir}/$metadata->{filename}};
-        }
-        elsif ( $filename =~ m{\.md\z}xms ) {
-            # process as markdown
-            $data->{content} = markdown( $raw );
-            $outfile = qq{$opt->{dest}/$metadata->{dir}/$metadata->{filename}};
-            $outfile =~ s{\.md\z}{.html}gxms;
-        }
-        elsif ( $filename =~ m{\.markdown\z}xms ) {
-            # process as markdown
-            $data->{content} = markdown( $raw );
-            $outfile = qq{$opt->{dest}/$metadata->{dir}/$metadata->{filename}};
-            $outfile =~ s{\.markdown\z}{.html}gxms;
-        }
-        elsif ( $filename =~ m{\.textile\z}xms ) {
-            # process as textile
-            $data->{content} = textile( $raw );
-            $outfile = qq{$opt->{dest}/$metadata->{dir}/$metadata->{filename}};
-            $outfile =~ s{\.textile\z}{.html}gxms;
-        }
-        elsif ( $filename =~ m{\.txt\z}xms ) {
-            # process as plain text
-            $data->{content} = q{<pre>} . encode_entities($raw) . q{<pre>};
-            $outfile = qq{$opt->{dest}/$metadata->{dir}/$metadata->{filename}};
-            $outfile =~ s{\.txt\z}{.html}gxms;
-        }
-        else {
-            # ToDo: WikiCreole?
-            # ToDo: WikiFormat?
-            print STDERR qq{Warning: unknown filetype, skipping};
-            next;
-        }
-
-        # get a bit of all the paths
-        my @parts = split('/', $metadata->{dir});
-        print "parts=@parts\n";
-        my $path;
-        my @sections = ( q{.} );
-        foreach my $part ( @parts ) {
-            if ( defined $path ) {
-                $path .= qq{/$part};
-            }
-            else {
-                $path = $part;
-            }
-            push @sections, $path;
-        }
-
-        # process this file
-        my $output = '';
-        my $template_data = {
-            data => $data,
-            blat => {
-                # ToDo: this only copes with 1 level so far - make it more generic
-                # parents => [ $section->{'.'}{data}, ( $metadata->{dir} eq q{.} ? () : $section->{$metadata->{dir}}{data} ), $metadata->{data} ],
-            },
-        };
-        foreach my $section_name ( @sections ) {
-            push @{$template_data->{blat}{parents}}, $section->{$section_name}{data};
-        }
-
-        unless ( $template->process( $data->{template}, $template_data, \$output ) ) {
-            print STDERR q{* something went wrong, skipping: } . $template->error() . qq{\n};
-            next;
-        }
-
-        # write the output file
-        verbose( qq{Written $outfile} );
-        mkpath( qq{$opt->{dest}/$metadata->{dir}} );
-        write_file( $outfile, $output );
+        process_file( $opt, $template, $site, $section, $filename, $metadata );
     }
+    title( qq{Finished} );
 }
 
 ## --------------------------------------------------------------------------------------------------------------------
+
+sub process_file {
+    my ($opt, $template, $site, $section, $filename, $metadata) = @_;
+
+    # default the section data to nothing
+    $section->{$metadata->{dir}}{data} ||= {};
+
+    # ToDo: should go up the levels, rather than just (site, section, file);
+    # should be (site, parent sections..., section, file).
+    # ToDo: need to change to inherit from multiple levels
+    my $data = { %{$site->{data}}, %{$section->{$metadata->{dir}}{data}}, %{$metadata->{data}} };
+
+    # read the file in, then process it
+    my $raw = read_file( $metadata->{fullname} );
+    my $outfile;
+    if ( $filename =~ m{\.html\z}xms ) {
+        # just save as-is
+        $data->{content} = $raw;
+        $outfile = qq{$opt->{dest}/$metadata->{dir}/$metadata->{filename}};
+    }
+    elsif ( $filename =~ m{\.md\z}xms ) {
+        # process as markdown
+        $data->{content} = markdown( $raw );
+        $outfile = qq{$opt->{dest}/$metadata->{dir}/$metadata->{filename}};
+        $outfile =~ s{\.md\z}{.html}gxms;
+    }
+    elsif ( $filename =~ m{\.markdown\z}xms ) {
+        # process as markdown
+        $data->{content} = markdown( $raw );
+        $outfile = qq{$opt->{dest}/$metadata->{dir}/$metadata->{filename}};
+        $outfile =~ s{\.markdown\z}{.html}gxms;
+    }
+    elsif ( $filename =~ m{\.textile\z}xms ) {
+        # process as textile
+        $data->{content} = textile( $raw );
+        $outfile = qq{$opt->{dest}/$metadata->{dir}/$metadata->{filename}};
+        $outfile =~ s{\.textile\z}{.html}gxms;
+    }
+    elsif ( $filename =~ m{\.txt\z}xms ) {
+        # process as plain text
+        $data->{content} = q{<pre>} . encode_entities($raw) . q{<pre>};
+        $outfile = qq{$opt->{dest}/$metadata->{dir}/$metadata->{filename}};
+        $outfile =~ s{\.txt\z}{.html}gxms;
+    }
+    else {
+        # ToDo: WikiCreole?
+        # ToDo: WikiFormat?
+        print STDERR qq{Warning: unknown filetype, skipping};
+        next;
+    }
+
+    # get a bit of all the paths
+    my @parts = split('/', $metadata->{dir});
+    print "parts=@parts\n";
+    my $path;
+    my @sections = ( q{.} );
+    foreach my $part ( @parts ) {
+        if ( defined $path ) {
+            $path .= qq{/$part};
+        }
+        else {
+            $path = $part;
+        }
+        push @sections, $path;
+    }
+
+    # process this file
+    my $output = '';
+    my $template_data = {
+        data => $data,
+        blat => {
+            # ToDo: this only copes with 1 level so far - make it more generic
+            # parents => [ $section->{'.'}{data}, ( $metadata->{dir} eq q{.} ? () : $section->{$metadata->{dir}}{data} ), $metadata->{data} ],
+        },
+    };
+    foreach my $section_name ( @sections ) {
+        push @{$template_data->{blat}{parents}}, $section->{$section_name}{data};
+    }
+
+    unless ( $template->process( $data->{template}, $template_data, \$output ) ) {
+        print STDERR q{* something went wrong, skipping: } . $template->error() . qq{\n};
+        next;
+    }
+
+    # write the output file
+    verbose( qq{Written $outfile} );
+    mkpath( qq{$opt->{dest}/$metadata->{dir}} );
+    write_file( $outfile, $output );
+}
 
 sub get_files {
     my ($dir) = @_;
