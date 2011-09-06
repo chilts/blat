@@ -205,7 +205,7 @@ sub get_files {
                     dir      => $cwd,
                     filename => $filename,
                     fullname => $fullname,
-                    data     => get_data( $filename ),
+                    data     => load_data( $filename ),
                 }
             }
             elsif ( $filename eq '.section.json' ) {
@@ -215,7 +215,7 @@ sub get_files {
                     dir      => $cwd,
                     filename => $filename,
                     fullname => $fullname,
-                    data     => get_data( $filename ),
+                    data     => load_data( $filename ),
                 }
             }
             elsif ( $filename =~ m{\.json\z}xms ) {
@@ -226,7 +226,7 @@ sub get_files {
                     return;
                 }
                 verbose( qq{Found data: $cwd/$filename} );
-                $page->{qq{$cwd/$other}}{data} = get_data( $filename );
+                $page->{qq{$cwd/$other}}{data} = load_data( $filename );
             }
             else {
                 # make sure that a datafile is present for this content file
@@ -249,7 +249,7 @@ sub get_files {
     return ($site, $section, $page);
 }
 
-sub get_data {
+sub load_data {
     my ($filename) = @_;
     return JSON::Any->jsonToObj( scalar read_file( $filename ) );
 }
