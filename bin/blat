@@ -40,7 +40,7 @@ my $VERBOSE = 0;
 ## --------------------------------------------------------------------------------------------------------------------
 # constants
 
-use constant VERSION => '0.1';
+use constant VERSION => '0.2';
 
 ## --------------------------------------------------------------------------------------------------------------------
 
@@ -48,6 +48,17 @@ use constant VERSION => '0.1';
     # get the input stuff
     my $opt = get_opt();
     my $cfg = get_cfg( $opt );
+
+    # if we need to show help, show it now and exit
+    if ( $opt->{help} ) {
+        usage();
+        exit 0;
+    }
+
+    if ( $opt->{version} ) {
+        version();
+        exit 0;
+    }
 
     for my $dir ( qw(src dest template) ) {
         $opt->{$dir} =~ s{ \/+ \z }{}gxms;
@@ -352,6 +363,21 @@ Options: ...
 
 
 EOF
+}
+
+sub version {
+    print "blat v" . VERSION . "\n\n";
+    print <<'EOF';
+Copyright 2009, 2011 Andrew Chilton.
+* andychilton@gmail.com
+* http://www.chilts.org/blog/
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+EOF
+
 }
 
 ## --------------------------------------------------------------------------------------------------------------------
