@@ -27,6 +27,7 @@ use Getopt::Mixed "nextOption";
 use Config::Simple;
 use File::Find;
 use File::Path;
+use File::Copy::Recursive qw(dircopy);
 use JSON::Any;
 use File::Slurp;
 use Template;
@@ -63,8 +64,17 @@ use constant VERSION => '0.2';
     for my $dir ( qw(src dest template) ) {
         $opt->{$dir} =~ s{ \/+ \z }{}gxms;
         debug( qq{opt{$dir}: $opt->{$dir}} );
+        # make sure each of these directories are present
+        unless ( -d $opt->{$dir} ) {
+            error( qq{Couldn't find directory '$dir'} );
+        }
     }
     debug( q{} );
+
+    # firstly, copy all static files
+    title( qq{Copying Static Files} );
+    my $files = dircopy( $opt->{static}, $opt->{dest} );
+    verbose( qq{Copied $files files and directories} );
 
     # find all the source files and split into 'pages' and 'data'
     title( qq{Finding Files} );
@@ -278,6 +288,7 @@ sub get_opt {
 
     # all the long and short option names
     my @options = qw(
+        static=s   c>static
         src=s      s>src
         dest=s     d>dest
         template=s t>template
@@ -301,6 +312,7 @@ sub get_opt {
     }
 
     # set some defaults
+    $opt->{static} ||= q{static};
     $opt->{src} ||= q{src};
     $opt->{dest} ||= q{htdocs};
     $opt->{template} ||= q{tt};
@@ -342,6 +354,12 @@ sub debug {
     print qq{$msg\n};
 }
 
+sub error {
+    my ($msg) = @_;
+    print qq{Error: $msg\n};
+    exit 2;
+}
+
 sub usage {
     my ($msg) = @_;
     if ( defined $msg ) {
@@ -353,6 +371,7 @@ Usage: $0 <>
 
 Options: ...
 
+ -c, --static           the static directory (default: static)
  -s, --src              the source directory (default: src)
  -d, --dest             the destination directory (default: htdocs)
  -t, --template         the template directory (default: tt)
