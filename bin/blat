@@ -61,27 +61,30 @@ use constant VERSION => '0.2';
         exit 0;
     }
 
-    for my $dir ( qw(src dest template) ) {
+    debug_title( qq{Checking Directories} );
+    for my $dir ( qw(src dest template static) ) {
         $opt->{$dir} =~ s{ \/+ \z }{}gxms;
-        debug( qq{opt{$dir}: $opt->{$dir}} );
+        debug( qq{$dir: '$opt->{$dir}'} );
         # make sure each of these directories are present
         unless ( -d $opt->{$dir} ) {
-            error( qq{Couldn't find directory '$dir'} );
+            error( qq{Couldn't find directory '} . ($opt->{$dir} // '') . q{'} );
         }
     }
-    debug( q{} );
 
     # firstly, copy all static files
     title( qq{Copying Static Files} );
-    my $files = dircopy( $opt->{static}, $opt->{dest} );
-    verbose( qq{Copied $files files and directories} );
+    # Note: dircopy always says one even for an empty source directory, so remove one from it
+    my $files = dircopy( $opt->{static} . q{/}, $opt->{dest} . q{/} ) - 1;
+    verbose( qq{Copied $files files and/or directories} );
 
     # find all the source files and split into 'pages' and 'data'
     title( qq{Finding Files} );
     my ($site, $section, $page) = get_files( $opt->{src} );
-    # pp($site);
-    # pp($section);
-    # pp($page);
+    my $count = keys %$page;
+    verbose( qq{Found $count file(s)} );
+    debug_pp(q{Site}, $site);
+    debug_pp(q{Section}, $section);
+    debug_pp(q{Page}, $page);
 
     # default the site data to nothing
     $site->{data} ||= {};
@@ -95,9 +98,22 @@ use constant VERSION => '0.2';
 
     # finally, loop through all the pages and template them in
     title( qq{Processing Files} );
-    while ( my ($filename, $metadata) = each %$page ) {
-        process_file( $opt, $template, $site, $section, $filename, $metadata );
+    if ( %$page ) {
+        while ( my ($filename, $metadata) = each %$page ) {
+            process_file( $opt, $template, $site, $section, $filename, $metadata );
+        }
     }
+    else {
+        verbose( qq{No files to process} );
+    }
+
+    # ok, loop through all the sections and see if there is something special to do
+    # title( qq{Processing Sections} );
+    # while ( my ($section, $metadata) = each %$page ) {
+    #     print "doing section=$section\n";
+    #     # process_file( $opt, $template, $site, $section, $filename, $metadata );
+    # }
+
     title( qq{Finished} );
 }
 
@@ -315,7 +331,7 @@ sub get_opt {
     $opt->{static} ||= q{static};
     $opt->{src} ||= q{src};
     $opt->{dest} ||= q{htdocs};
-    $opt->{template} ||= q{tt};
+    $opt->{template} ||= q{template};
 
     # set these globals
     $DEBUG = $opt->{debug};
@@ -346,6 +362,12 @@ sub verbose {
     my ($msg) = @_;
     return unless $VERBOSE;
     print qq{$msg\n};
+}
+
+sub debug_title {
+    my ($title) = @_;
+    my $msg = q{--- } . $title . q{ ---} . q{-} x (71-(length($title)) );
+    debug($msg);
 }
 
 sub debug {
@@ -386,7 +408,7 @@ Options: ...
  -c, --static           the static directory (default: static)
  -s, --src              the source directory (default: src)
  -d, --dest             the destination directory (default: htdocs)
- -t, --template         the template directory (default: tt)
+ -t, --template         the template directory (default: template)
      --version          version
      --help             help
      --verbose          verbose
