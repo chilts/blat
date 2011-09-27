@@ -149,13 +149,13 @@ sub process_file {
     else {
         # ToDo: WikiCreole?
         # ToDo: WikiFormat?
-        print STDERR qq{Warning: unknown filetype, skipping};
+        warning( qq{unknown filetype, skipping} );
         next;
     }
 
     # get a bit of all the paths
     my @parts = split('/', $metadata->{dir});
-    print "parts=@parts\n";
+    debug( qq{parts=@parts} );
     my $path;
     my @sections = ( q{.} );
     foreach my $part ( @parts ) {
@@ -208,7 +208,7 @@ sub get_files {
             return if -d $filename;
             return if $filename eq q{.};
             unless ( -f $filename ) {
-                print STDERR qq{Warning: not a regular file ($filename), skipping\n};
+                warning( qq{not a regular file ($filename), skipping} );
                 return;
             };
 
@@ -224,7 +224,7 @@ sub get_files {
             if ( $filename eq '.site.json' ) {
                 # only save the site data file if it's in the top-level
                 unless ( $cwd eq '.' ) {
-                    print STDERR qq{Warning: Site file '$filename' ignored since not in top-level\n};
+                    warning( qq{Site file '$filename' ignored since not in top-level} );
                     return;
                 }
 
@@ -251,7 +251,7 @@ sub get_files {
                 # if there is a file which corresponds with this one, save the data straight away
                 my $other = substr($filename, 0, -5);
                 unless ( -f $other ) {
-                    print STDERR qq{Warning: Found .json file ($filename) which doesn't have a page file, skipping\n};
+                    warning( qq{found .json file ($filename) which doesn't have a page file, skipping} );
                     return;
                 }
                 verbose( qq{Found data: $cwd/$filename} );
@@ -260,7 +260,7 @@ sub get_files {
             else {
                 # make sure that a datafile is present for this content file
                 unless ( -f qq{$filename.json} ) {
-                    print STDERR qq{Error: found page file ($filename) with missing data file\n};
+                    warning( qq{found page file ($cwd/$filename) with missing data file} );
                     return;
                 }
 
@@ -352,6 +352,18 @@ sub debug {
     my ($msg) = @_;
     return unless $DEBUG;
     print qq{$msg\n};
+}
+
+sub debug_pp {
+    my ($msg, $data) = @_;
+    return unless $DEBUG;
+    print qq{$msg:\n};
+    pp($data);
+}
+
+sub warning {
+    my ($msg) = @_;
+    print STDERR qq{Warning: $msg\n};
 }
 
 sub error {
